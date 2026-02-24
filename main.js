@@ -858,6 +858,43 @@ function readFileAsText(file) {
   });
 }
 
+// export a file to computer
+
+const btnExportFile = document.getElementById("btnExportFile");
+
+// Function to download data to a file
+// ref: https://stackoverflow.com/questions/11620698/how-to-trigger-a-file-download-when-clicking-an-html-button-or-javascript#:~:text=25%20Answers&text=You%20can%20trigger%20a%20download%20with%20the%20HTML5%20download%20attribute.&text=Where:,defaults%20to%20the%20file's%20name.
+function download(data, filename) {
+    var file = new Blob([data], {type: "text/plain"});
+    if (window.navigator.msSaveOrOpenBlob) // IE10+
+        window.navigator.msSaveOrOpenBlob(file, filename);
+    else { // Others
+        var a = document.createElement("a"),
+                url = URL.createObjectURL(file);
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function() {
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);  
+        }, 0); 
+    }
+}
+
+btnExportFile.addEventListener("click", async () => {
+  
+  if(leanfs.isDir(window.currentFileId)) {
+    alert("Cannot export a folder! Please select a file.");
+    return;
+  }
+
+  const filename = leanfs.getName(window.currentFileId);
+  const content = await leanfs.readFile(window.currentFileId);
+
+  download(content, filename);
+});
+
 // ===== sync state tree (selected, focused) cho thao tác ngoài tree =====
 window.__rctItemActions ||= new Map();
 const rememberItemActions = (uuid, ctx) => uuid && ctx && window.__rctItemActions.set(uuid, ctx);

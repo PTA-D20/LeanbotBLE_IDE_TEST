@@ -73,7 +73,7 @@
       <div id="fileTreeColumn">
 
         <!-- toolbar (fixed, non-scroll) -->
-        <div id="fileTreeToolbar">
+        <!-- <div id="fileTreeToolbar">
           <button class="lb-icon-btn" id="btnShowTree">
             <img class="lb-icon-img" src="./img/icons/tree.png" />
           </button>
@@ -82,6 +82,29 @@
           <button class="lb-icon-btn" id="btnNewFolder">＋Folder</button>
           <button class="lb-icon-btn" id="btnLoadFile">Import</button>
           <input type="file" id="FileInput" accept=".ino,.bduino,.xml" hidden>
+        </div> -->
+
+        <div id="fileTreeToolbar">
+
+          <!-- row 1 -->
+          <div class="ft-toolbar-row">
+            <button class="lb-icon-btn" id="btnShowTree">
+              <img class="lb-icon-img" src="./img/icons/tree.png" />
+            </button>
+            <button class="lb-icon-btn" id="btnNewFile">＋File</button>
+            <button class="lb-icon-btn" id="btnNewBlocklyFile">＋Blockly</button>
+            <button class="lb-icon-btn" id="btnNewFolder">＋Folder</button>
+          </div>
+
+          <!-- row 2 -->
+          <div class="ft-toolbar-row">
+            <button class="lb-icon-btn" id="btnLoadFile">Import</button>
+            <input type="file" id="FileInput" accept=".ino,.bduino,.xml" hidden>
+            <button class="lb-icon-btn" id="btnExportFile">Export</button>
+            <a href="http://git.pythaverse.space/">
+              <button class="lb-icon-btn">PGit</button>
+            </a>
+          </div>
         </div>
 
         <!-- file tree (scrollable) -->
