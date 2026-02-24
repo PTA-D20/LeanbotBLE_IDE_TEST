@@ -1,0 +1,655 @@
+export class LeanFs{
+    static #LS_KEY_TREE =     "LeanFs10__tree";
+    static #FILE_KEY_PREFIX = "LeanFs10_";
+    static #rootUUID =        "bd70ce61-fc7d-41a5-b0f9-0017e998813a"; // random generate from https://www.uuidgenerator.net/
+
+    static leanfs_TYPE = Object.freeze({
+        DIR:        "dir",
+        INO:        "ino",
+        BLOCKLY:    "blockly",
+        YAML:       "yaml",
+        OTHERS:     "others"
+    });
+
+    #items = {}
+    #delaySaveTree = false
+    #treeHash = null;
+    
+    constructor(){
+        // Enforce to always create New Object
+        if (!new.target) {
+            throw new Error("LeanFs must be called with 'new'");
+        }
+        this.#delaySaveTree = false;
+        this.#items = {};
+        this.#treeHash = null;
+    }
+
+    async mount(){
+        try{
+            // Restore workspace from localStorage if available (overwrites items, root UUID, and currentID).
+            await this.#loadTree(); 
+
+            // console.log("items:", this.#items)
+
+            console.log("[LeanFS.mount] Mount success");
+        }
+        catch(e){
+            const err = `[LeanFS.mount] Mount Failed!. Error occur: ${e}`
+            alert(err);
+            throw new Error(err)
+        }
+    }
+
+    /**-------------------------------------------------------- */
+    /** getItems()
+    * Dev-only accessor for StaticTreeDataProvider.
+    * Exposes live data; any other use can corrupt filesystem state.
+    */
+    getItems(){
+        return this.#items;
+    }
+    /**-------------------------------------------------------- */
+
+    getRoot(){
+        return LeanFs.#rootUUID;
+    }
+
+    getParent(itemUUID) { // Return 
+        const it = this.#getItem(itemUUID);
+        if(!it) return null;
+
+        const p = this.#getItem(it.parent);
+        if(!p)return null;
+
+        return p.index;
+    }
+
+    getAllChildren(itemUUID) { // Return children array of this one node (if there is any)
+        if(!this.isDir(itemUUID))return [];
+        return (this.#items[itemUUID].children || []).filter(cid => this.#items[cid]);
+    }
+
+    isExist(itemUUID) {
+        return !!this.#getItem(itemUUID);
+    }
+
+    isFile(itemUUID) {
+        const item = this.#getItem(itemUUID);
+        if (!item) return false;
+        return item.isFolder === false;
+    }
+
+    isDir(itemUUID) {
+        const item = this.#getItem(itemUUID);
+        if (!item) return false;
+        return item.isFolder === true;
+    }
+
+    async createFile(parentUUID){ // default name = timestamp
+
+        const childUUID = await this.#createItem(parentUUID);
+        if(!childUUID) return null;
+
+        this.#items[childUUID].isFolder = false; // file
+
+        return childUUID;
+    }
+
+    async createDir(parentUUID){ // default name = timestamp
+
+        const childUUID = await this.#createItem(parentUUID);
+        if(!childUUID) return null;
+
+        this.#items[childUUID].isFolder = true; // dir
+        this.#items[childUUID].children = [];
+
+        return childUUID;
+    }
+
+    // rename file bằng F2
+    async rename(itemUUID, newName) {
+
+        if (itemUUID === this.getRoot()) return; // NEVER rename root
+        
+        const item = this.#getItem(itemUUID);
+        if (!item) return;
+        
+        item.data = newName;
+        console.log( "[LeanFS.rename]", {uuid: itemUUID, newName: newName});
+
+        await this.#saveTree();
+    }
+
+    getName(itemUUID){
+        const item = this.#getItem(itemUUID);
+        if(!item) return null;
+        return item.data;
+    }
+
+    getItemType(itemUUID) {
+
+        // Folders are directories regardless of name or extension (include root)
+        if (this.isDir(itemUUID)) return LeanFs.leanfs_TYPE.DIR;
+
+        // Extract file extension from the last '.' only
+        // Examples:
+        //   "a.b.c.txt"   -> "txt"
+        //   "file.yaml"   -> "yaml"
+        //   "noext"       ->  null (no extension)
+        //  ".gitignore"   ->  null (no extension)
+        const ext = (() => {
+            const item = this.#items[itemUUID];
+            if (typeof item === "undefined") return null;
+
+            const name = item.data;
+            if (typeof name !== "string") return null;
+
+            const lastDot = name.lastIndexOf(".");
+            if (lastDot <= 0) return null;
+            if (lastDot === name.length - 1) return null;
+            return name.slice(lastDot + 1).toLowerCase();
+        })();
+
+        switch (ext) {
+            case "ino":
+                return LeanFs.leanfs_TYPE.INO;
+            case "bduino":
+            case "xml":
+                return LeanFs.leanfs_TYPE.BLOCKLY;
+            case "yaml":
+                return LeanFs.leanfs_TYPE.YAML;
+            default:
+                return LeanFs.leanfs_TYPE.OTHERS;
+        }
+    }
+
+    isType(itemUUID, leanfs_TYPE){
+        return leanfs_TYPE === this.getItemType(itemUUID);
+    }
+
+    isBlocklyFile(itemUUID){
+        return ( this.isType(itemUUID, LeanFs.leanfs_TYPE.BLOCKLY) );
+    }
+
+    // async readFile(itemUUID) {
+
+    //     if (!this.isFile(itemUUID)) return null;
+
+    //     const compressed = localStorage.getItem(this.#fileKey(itemUUID));
+    //     if (!compressed) return null;
+
+    //     const content = await decompressString(compressed);
+
+    //     this.#items[itemUUID].contentHash = await getContentHash(content)
+    //     return content;
+    // }
+
+    async readFile(itemUUID) {
+
+        if (!this.isFile(itemUUID)) return null;
+
+        const compressed = localStorage.getItem(this.#fileKey(itemUUID));
+        if (!compressed) return null;
+
+        try {
+            const content = await decompressString(compressed);
+
+            this.#items[itemUUID].contentHash = await getContentHash(content);
+            return content;
+
+        } catch (err) {
+
+            const fallbackRawData =`ERROR : File corrupted\nRaw file data:\n\n${compressed}`;
+
+            console.log(`${fallbackRawData}\n err: ${err}`);
+
+            this.#items[itemUUID].contentHash = await getContentHash(fallbackRawData);
+
+            return fallbackRawData;
+        }
+    }
+
+    async writeFile(itemUUID, content) {
+
+        if (!this.isFile(itemUUID)) return;
+
+        const oldHash = this.#items[itemUUID].contentHash;
+        const newHash = await getContentHash(content);
+
+        if(oldHash === newHash){
+            return;
+        }
+
+        const compressed = await compressString(content);
+        localStorage.setItem(this.#fileKey(itemUUID), compressed);
+        
+        this.#items[itemUUID].contentHash = newHash;
+        console.log("[LeanFS.writeFile]:", {uuid: itemUUID, hash: newHash});
+    }
+
+    async deleteFile(itemUUID) {
+        
+        if(itemUUID === this.getRoot())return; // NEVER delte root id.
+        if (this.isFile(itemUUID) === false) return;
+
+        // log to debug
+        console.info("[LeanFS.deleteFile] file remove:", { uuid: itemUUID });
+
+        // gỡ itemUUID khỏi mọi folder trước, tránh lệch parent sau drag
+        this.#removeFromParent(itemUUID);
+
+        this.#removeItem(itemUUID);
+        await this.#saveTree();
+    }
+
+    readDir(itemUUID, prefix = "") {
+        if (!itemUUID) return "";
+
+        const folderNode = this.#items[itemUUID];
+
+        if (!folderNode) return ""; // item not exist
+        if (this.isFile(itemUUID)) return `${prefix}${folderNode.data}`; // file => return name
+
+        const lines = [];
+        lines.push(folderNode.data + " /"); // folder name
+
+        const children = this.getAllChildren(itemUUID);
+
+        if (children.length === 0) {
+            lines.push(`${prefix}└─ Folder empty`); // empty folder
+            return lines.join("\n");
+        }
+
+        children.forEach((child, index) => {
+            const isLast = index === children.length - 1;
+            const connector = isLast ? "└─ " : "├─ ";
+            const isChildFolder = this.isDir(child);
+
+            const childPrefix = prefix + (isLast ? "   " : "│  "); // next level prefix
+            const contentPrefix = isChildFolder
+                ? childPrefix
+                : prefix + connector; // prefix passed to recursion
+
+            const content = this.readDir(child, contentPrefix); // recursive call
+
+            lines.push(
+                isChildFolder
+                    ? prefix + connector + content // folder entry
+                    : content // file entry
+            );
+        });
+
+        return lines.join("\n");
+    }
+
+    async deleteDir(itemUUID) {
+        if (!this.isDir(itemUUID)) return;
+
+        if(itemUUID === this.getRoot())return; // NEVER delte root id.
+
+        let prevDelaySaveTree = this.#delaySaveTree
+        this.#delaySaveTree = true
+
+        const children = [...this.getAllChildren(itemUUID)];
+        
+        for(const child of children){ // remove subtree
+            if(this.isFile(child)) await this.deleteFile(child);
+            if(this.isDir(child)) await this.deleteDir(child);
+        };
+        this.#removeFromParent(itemUUID); // Remove this directory from its parent
+
+        this.#removeItem(itemUUID); // Remove the directory itself
+
+        console.info("[LeanFS.deleteDir] dir removed", { uuid: itemUUID });
+
+        this.#delaySaveTree = prevDelaySaveTree
+        await this.#saveTree();
+    }
+
+    // find and load from tree with absolute path 
+    // e.g: path = test/test.txt => find test.txt inside test inside root.
+    getItemByPath(parentUUID, pathString){
+
+        if(!this.isDir(parentUUID))return null; // parentUUID is not dir
+
+        const parts = String(pathString).trim().split("/").filter(Boolean);
+        let currentId = parentUUID; // start at parent
+
+        if (!currentId) return null;
+
+        for (const name of parts) {
+
+            const nextId = this.getChildByName(currentId, name);
+
+            if (!nextId) return null;
+
+            currentId = nextId; // go to text level of the tree
+        }
+        return currentId;
+    }
+
+    getChildByName(parentUUID, name){
+
+        if(!this.isDir(parentUUID))return null; // parentUUID is not dir
+
+        const children = this.getAllChildren(parentUUID);
+
+        if (!children.length) return null; // dir is emtpy
+
+        const childUUID  = children.find(
+            uuid => this.getName(uuid) === name
+        );
+
+        return childUUID ;
+    }
+
+    getAncestorFolders(uuid) { // get ancestor until the root
+        const out = [];
+        let p = this.getParent(uuid);
+
+        while (p && p !== this.getRoot()) {
+            out.unshift(p);
+            p = this.getParent(p);
+        }
+        return out;
+    }
+
+    hasAnyFileOfType(type) { // Check if there is any .ino file in the workspace
+        const stack = [this.getRoot()];
+        while (stack.length) {
+            const id = stack.pop();
+            if (this.isType(id, type)) return true;
+            if (this.isDir(id)) stack.push(...this.getAllChildren(id));
+        }
+        return false;
+    }
+
+    pickNextItemAfterDelete(uuid) {
+        // Prefer parent folder
+        const parent = this.getParent(uuid);
+        if (parent && parent !== this.getRoot()) {
+            return parent;
+        }
+
+        // Otherwise scan root children
+        const children = this.getAllChildren(this.getRoot());
+        let firstFolder = null;
+
+        for (const id of children) {
+            if (id === uuid) continue;
+
+            if (this.isFile(id)) {
+                return id;
+            }
+
+            if (!firstFolder) {
+                firstFolder = id;
+            }
+        }
+
+        return firstFolder || null;
+    }
+
+    //============================================================
+    // Private
+    //============================================================
+
+    // === Storage Manage === //
+
+    async #saveTree() {
+        if (this.#delaySaveTree) {return;}
+
+        // Check if tree changed before save
+        const treeContent = JSON.stringify(this.#items);
+        const newHash = await getContentHash(treeContent);
+
+        if(this.#treeHash === newHash){
+            console.log("[LeanFS.saveTree] Skip (unchanged)");
+            return;
+        }
+
+        this.#treeHash = newHash;
+
+        // save tree
+        console.log("[LeanFS.saveTree] Save workspace");
+        const items = {};
+
+        for(const [uuid, item] of Object.entries(this.#items)){
+            items[uuid] = {
+                data: item.data,
+                children: Array.isArray(item.children) ? [...item.children] : null,
+            };
+        }
+
+        const json = JSON.stringify(items);
+
+        localStorage.setItem(LeanFs.#LS_KEY_TREE, json);
+    }
+
+    #fileKey(uuid) {
+        return LeanFs.#FILE_KEY_PREFIX + uuid;
+    }
+
+    async #newTree(){ // first time creating tree
+        this.#items = {
+            [LeanFs.#rootUUID]: {
+                index: LeanFs.#rootUUID, // root
+                isFolder: true,
+                children: [],
+                data: "Workspace",
+                contentHash: null,
+            },
+        };
+        console.log("[LeanFS.newTree] Creating new Tree")
+        await this.#saveTree();
+    }
+
+    async #loadTree() {
+        try {
+            const rawTree = localStorage.getItem(LeanFs.#LS_KEY_TREE);
+
+            if (!rawTree) {
+                console.log("[LeanFS.loadTree] No workspace found in localStorage");
+                await this.#newTree();
+                return;
+            }
+            
+            this.#items = JSON.parse(rawTree)
+
+            // loop through json key value list
+            for (const [uuid, item] of Object.entries(this.#items)) {
+                //console.log(`${uuid}: ${item}`);
+                item.isFolder = Array.isArray(item.children);
+                if (!item.isFolder) item.children = null; // extra safe
+                item.index = uuid
+                item.contentHash = null
+            }
+
+            this.#rebuildParents();
+
+            // await this.#saveTree();
+            console.log("[LeanFS.loadTree] Workspace restored");
+        } catch (e) {
+            console.error("[LeanFS.loadTree] Restore failed", e);
+            throw e;
+        } 
+        // finally {
+        //     await this.#saveTree();
+        // }
+    }
+
+    #getItem(itemUUID){
+        if(!itemUUID)return null;
+        return this.#items[itemUUID];
+    }
+
+    #removeItem(itemUUID){
+        localStorage.removeItem(this.#fileKey(itemUUID));
+        delete this.#items[itemUUID];
+    }
+
+    // === File management === //
+
+    // Gắn parent cho mỗi node, để move nhanh
+    #rebuildParents() {
+
+        for (const [uuid, item] of Object.entries(this.#items)) {
+            item.parent = null;
+        }
+
+        for (const [uuid, item] of Object.entries(this.#items)) {
+            const ch = item.children;
+            if (!Array.isArray(ch)) continue;
+            for (const cid of ch) if (this.#items[cid]) this.#items[cid].parent = uuid;
+        }
+
+    }
+
+    // drag drop, reorder, move folder
+    #removeFromParent(childId) {
+        let removedParent = null;
+
+        const parentUUID = this.getParent(childId);
+        const p = this.#getItem(parentUUID);
+
+        if (p?.children) {
+            const list = p.children;
+            const before = list.length;
+            p.children = list.filter((x) => x !== childId);
+            if (p.children.length !== before) removedParent = parentUUID;
+        }
+
+        // fallback: nếu parent bị sai, quét toàn bộ folder để xóa mọi chỗ đang chứa childId
+        for (const [uuid, item] of Object.entries(this.#items)) {
+            if (!this.isDir(uuid)) continue;
+            if (!Array.isArray(item.children)) continue;
+
+            const before = item.children.length;
+            item.children = item.children.filter((x) => x !== childId);
+            if (item.children.length !== before) removedParent = removedParent || uuid;
+        }
+
+
+        return removedParent;
+    }
+
+    // === Create New item (file or dir) === // 
+
+    // Thêm file, folder
+    async #createItem(parentId) {
+
+        const p = this.#getItem(parentId);
+        if(!p)return null;
+
+        const uuid = createUUID();
+
+        this.#items[uuid] = { index: uuid, isFolder: null, children: null, data: getTimestampName(), parent: parentId, contentHash: null};
+        p.children ||= [];
+        // p.children.push(uuid);
+        p.children.unshift(uuid); // keep newly created items at the top of the list
+
+        console.log("[LeanFS.createItem] create new Item (uuid):", {name: this.#items[uuid].data, uuid: uuid , parent: parentId});
+        await this.#saveTree();
+
+        return uuid;
+    }
+}
+
+function createUUID() {
+  return crypto.randomUUID();
+}
+
+function getTimestampName() {
+  const d = new Date();
+
+  const yyyy = d.getFullYear();
+  const mm   = String(d.getMonth() + 1).padStart(2, "0");
+  const dd   = String(d.getDate()).padStart(2, "0");
+
+  const hh   = String(d.getHours()).padStart(2, "0");
+  const mi   = String(d.getMinutes()).padStart(2, "0");
+  const sec  = String(d.getSeconds()).padStart(2, "0");
+
+  return `${yyyy}.${mm}.${dd}-${hh}.${mi}.${sec}`;
+}
+
+// === Compress Helper === // 
+
+/* Uint8Array -> base64 */
+function uint8ToBase64(bytes) {
+    let binary = '';
+    bytes.forEach(b => binary += String.fromCharCode(b));
+    return btoa(binary);
+}
+
+/* base64 -> Uint8Array */
+function base64ToUint8(base64) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+}
+
+async function compressString(str) {
+
+    if(!compressString.textEncoder){
+        compressString.textEncoder = new TextEncoder();
+    }
+
+    const t1 = performance.now();
+    const stream = new Blob([compressString.textEncoder.encode(str)])
+        .stream()
+        .pipeThrough(new CompressionStream('gzip'));
+
+    const buffer = await new Response(stream).arrayBuffer();
+    const compressed = uint8ToBase64(new Uint8Array(buffer));
+
+    const t2 = performance.now();
+    console.log(`[COMPRESS] ${str.length} -> ${compressed.length} ` +`in ${(t2 - t1).toFixed(2)} ms`);
+
+    return compressed;
+}
+
+async function decompressString(base64) {
+
+    if(!decompressString.textDecoder){
+        decompressString.textDecoder = new TextDecoder();
+    }
+
+    const t1 = performance.now();
+    const bytes = base64ToUint8(base64);
+
+    const stream = new Blob([bytes])
+        .stream()
+        .pipeThrough(new DecompressionStream('gzip'));
+
+    const buffer = await new Response(stream).arrayBuffer();
+    const decompressed = decompressString.textDecoder.decode(buffer);
+
+    const t2 = performance.now();
+    console.log(`[DECOMPRESS] ${base64.length} -> ${decompressed.length} ` +`in ${(t2 - t1).toFixed(2)} ms`);
+
+    return decompressed;
+}
+
+// === Hash helper === //
+
+function bufferToHex(buffer) {
+  return [...new Uint8Array(buffer)]
+    .map(b => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function getContentHash(content){
+    if(!getContentHash.textEncoder){
+        getContentHash.textEncoder = new TextEncoder();
+    }
+
+    const data = getContentHash.textEncoder.encode(content ?? "");
+    const hashBuffer = await window.crypto.subtle.digest("SHA-1", data);
+    const newHash = bufferToHex(hashBuffer);
+    return newHash;
+}

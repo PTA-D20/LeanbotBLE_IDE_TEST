@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Leanbot BLE</title>
+  <link rel="icon" type="image/png" href="./img/logo-lb-title.png">
+  <link href="https://unpkg.com/react-complex-tree/lib/style.css" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+  <!-- TOP BAR -->
+  <div id="topBar" class="lb-topbar">
+    <div class="lb-top-left">
+      <div class="lb-tabs">
+        <button class="lb-tab disabled">
+          <img class="lb-tab-icon" id="logoIcon" src="./img/logo-lb.png" />
+        </button>
+
+        <!-- <button id="btnCode" class="lb-tab disabled hidden">
+          <img class="lb-tab-icon" id="codeIcon" src="./img/icons/code.png" />
+          <span>CODE</span>
+        </button>
+
+        <button class="lb-tab disabled hidden">
+          <img class="lb-tab-icon" src="./img/icons/libraries.png" />
+          <span>LIBRARIES</span>
+        </button>
+
+        <button class="lb-tab disabled hidden">
+          <img class="lb-tab-icon" src="./img/icons/tools.png" />
+          <span>TOOLS</span>
+        </button> -->
+
+        <button class="lb-tab disabled">
+          <img class="lb-tab-icon" src="./img/icons/about.png" />
+          <span>ABOUT</span>
+        </button>
+
+        <button class="lb-tab disabled">
+          <img class="lb-tab-icon" id="ptutorIcon" src="./img/icons/ptutor.png" />
+          <span>PTUTOR</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="lb-top-right">
+      <button id="btnCompile" class="lb-icon-btn">
+        <img class="lb-icon-img" src="./img/icons/compile.png" />
+        <span>COMPILE</span>
+      </button>
+
+      <button id="btnUpload" class="lb-icon-btn">
+        <img class="lb-icon-img" src="./img/icons/upload.png" />
+        <span>UPLOAD</span>
+      </button>
+
+      <button id="btnSerial" class="lb-icon-btn">
+        <img class="lb-icon-img" src="./img/icons/serial.png" />
+        <span>SERIAL</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- WORKSPACE -->
+  <div id="workspace">
+
+    <!-- editorRow: 2-column layout (file tree | editor) -->
+    <div id="editorRow">
+
+      <!-- LEFT COLUMN -->
+      <div id="fileTreeColumn">
+
+        <!-- toolbar (fixed, non-scroll) -->
+        <div id="fileTreeToolbar">
+          <button class="lb-icon-btn" id="btnShowTree">
+            <img class="lb-icon-img" src="./img/icons/tree.png" />
+          </button>
+          <button class="lb-icon-btn" id="btnNewFile">＋File</button>
+          <button class="lb-icon-btn" id="btnNewBlocklyFile">＋Blockly</button>
+          <button class="lb-icon-btn" id="btnNewFolder">＋Folder</button>
+          <button class="lb-icon-btn" id="btnLoadFile">Import</button>
+          <input type="file" id="FileInput" accept=".ino,.bduino,.xml" hidden>
+        </div>
+
+        <!-- file tree (scrollable) -->
+        <div id="fileTreePanel">
+          <div id="fileTreeMount"></div>
+          <div id="treeCtxMenu" class="ctx-menu is-hidden">
+            <button type="button" id="ctxRename">Rename</button>
+            <button type="button" id="ctxDelete">Delete</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- EDITOR -->
+      <div id="editorSection">
+
+        <!-- Show Monaco on top -->
+        <div id="codeEditor"></div>
+
+        <!-- Embed Blockly on bottom -->
+        <div id="blocklyEditor">
+          <iframe id="blocklyInlineFrame" src="LB-blockly/index.html"></iframe>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- SERIAL MONITOR -->
+    <div id="serialSection" class="is-hidden">
+
+      <!-- Tabs -->
+      <div id="serialTabsBar">
+        <div id="serialTabs">
+          <button class="serial-tab active" data-tab="program">PROGRAM</button>
+          <button class="serial-tab" data-tab="monitor">MONITOR</button>
+        </div>
+
+        <div id="serialTabsRight">
+          <label id="autoHideWrap" class="text-checkbox">
+            <input type="checkbox" id="autoHideSerial" checked>
+            Auto hide
+          </label>
+
+          <button id="btnCloseSerial">
+            <img class="lb-icon-img" src="./img/icons/close.png" />
+          </button>
+        </div>
+      </div>
+
+      <!-- Panels -->
+      <div id="serialPanels">
+
+        <!-- PROGRAM PANEL -->
+        <div id="programPanel" class="serial-panel">
+          <div id="programGrid">
+
+            <!-- COMPILE -->
+            <div id="programCompile" class="group-box compile">
+              <div class="group-body">
+                <div class="col-progress">
+                  <div class="group-header">
+                    <div class="rssi"></div>
+                    <span class="title" id="compileTitle">Compile</span>
+                    <span class="time" id="compileTime">0.0 sec</span>
+                  </div>
+
+                  <div class="progress-list">
+                    <div class="progress-wrapper">
+                      <progress id="progCompile" class="yellow" value="0" max="100"></progress>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="msg-box">
+                  <textarea id="compileLog" readonly></textarea>
+                </div>
+              </div>
+            </div>
+
+            <!-- UPLOAD -->
+            <div id="programUpload" class="group-box upload">
+              <div class="group-body">
+                <div class="col-progress">
+                  <div class="group-header">
+                    <div class="rssi" id="uploadRSSI"></div>
+                    <span class="title" id="uploadTitle">Upload</span>
+                    <span class="time" id="uploadTime">0.0 sec</span>
+                  </div>
+
+                  <div class="progress-list">
+                    <div class="progress-wrapper">
+                      <progress id="progTransfer" class="yellow" value="0" max="100"></progress>
+                      <div class="progress-label" id="uploadStatus1">Transfer</div>
+                    </div>
+
+                    <div class="progress-wrapper">
+                      <progress id="progWrite" class="yellow" value="0" max="100"></progress>
+                      <div class="progress-label" id="uploadStatus2">Write</div>
+                    </div>
+
+                    <div class="progress-wrapper">
+                      <progress id="progVerify" class="yellow" value="0" max="100"></progress>
+                      <div class="progress-label" id="uploadStatus3">Verify</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="msg-box">
+                  <textarea id="uploadLog" readonly></textarea>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- MONITOR PANEL -->
+        <div id="monitorPanel" class="serial-panel is-hidden">
+          <textarea id="serialLog" readonly></textarea>
+
+          <div id="serialBottom">
+
+            <!-- 1) INPUT + SEND (trái, input rộng nhất) -->
+            <div class="serial-group serial-send">
+              <input type="text" id="serialInput" placeholder="Send Message -> ..." />
+              <button id="btnSend">Send</button>
+            </div>
+
+            <!-- 2) TOGGLES (giữa) -->
+            <div class="serial-group serial-toggles">
+              <label class="text-checkbox"><input type="checkbox" id="addNewline" checked> Newline</label>
+              <label class="text-checkbox"><input type="checkbox" id="autoScroll" checked> Autoscroll</label>
+              <label class="text-checkbox"><input type="checkbox" id="showTimestamp"> Timestamp</label>
+            </div>
+
+            <!-- 3) ACTIONS (phải) -->
+            <div class="serial-group serial-actions">
+              <button id="btnClear" class="btn-small">Clear</button>
+              <button id="btnCopy" class="btn-small">Copy</button>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- BOTTOM BAR -->
+  <footer class="lb-bottombar">
+    <div class="lb-bottom-left">
+      <span>Leanbot BLE © 2025</span>
+      <button class="lb-icon-btn disabled">
+        <img class="lb-icon-img" src="./img/icons/git.png" />
+        <span>LEANBOT GIT</span>
+      </button>
+      <!-- <button class="lb-icon-btn disabled">
+        <img class="lb-icon-img" src="./img/icons/blockly.png" />
+        <span>BLOCKLY LEANBOT</span>
+      </button> -->
+    </div>
+
+    <div class="lb-bottom-right">
+      <button id="btnConnect" class="lb-icon-btn">SELECT LEANBOT...</button>
+      <span id="leanbotStatus" class="disconnected">No Leanbot</span>
+      <button id="btnReconnect" class="lb-icon-btn">RECONNECT</button>
+      <button class="lb-icon-btn disabled">
+        <span class="lb-meta">SERVER:</span>
+        <span class="lb-pill online">ONLINE</span>
+      </button>
+    </div>
+  </footer>
+
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/react-complex-tree/lib/bundle.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.1/dist/js-yaml.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
+  <script type="module" src="main.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.0/min/vs/loader.js"></script>
+</body>
+</html>
