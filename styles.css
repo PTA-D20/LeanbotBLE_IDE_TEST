@@ -207,23 +207,28 @@ body{
 
 .ft-toolbar-row {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 6px;
 }
 
-/* normalize toolbar buttons */
 #fileTreeToolbar .lb-icon-btn{
+  flex: 1 1 0;            
   height: 26px;
   padding: 0 8px;
   font-size: 12px;
   letter-spacing: 0;
   white-space: nowrap;
-  flex: 0 0 auto;
   border-radius: 4px;
+
+  display: flex;        
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 /* make icon-only button square and centered */
 #btnShowTree{
+  flex: 0 0 26px;  
   width: 26px;
   padding: 0;
   justify-content: center;
@@ -233,10 +238,6 @@ body{
 #fileTreeToolbar .lb-icon-img{
   width: 13px;
   height: 13px;
-}
-
-#fileTreeToolbar .ft-toolbar-row:nth-child(2) {
-  padding-left: 40px;
 }
 
 /* tighten text buttons */

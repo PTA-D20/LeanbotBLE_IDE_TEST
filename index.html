@@ -101,9 +101,13 @@
             <button class="lb-icon-btn" id="btnLoadFile">Import</button>
             <input type="file" id="FileInput" accept=".ino,.bduino,.xml" hidden>
             <button class="lb-icon-btn" id="btnExportFile">Export</button>
-            <a href="http://git.pythaverse.space/">
-              <button class="lb-icon-btn">PGit</button>
-            </a>
+            <button class="lb-icon-btn" onclick="newPGitTab()">PGit</button>
+            <script>
+              function newPGitTab() {
+                const url = 'http://git.pythaverse.space/';
+                window.open(url, '_blank');
+              }
+            </script>
           </div>
         </div>
 
