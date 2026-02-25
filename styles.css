@@ -206,13 +206,13 @@ body{
 }
 
 .ft-toolbar-row {
-  display: flex;
-  align-items: stretch;
+  display: grid;
+  grid-template-columns: 26px repeat(3, 1fr);
   gap: 6px;
 }
 
 #fileTreeToolbar .lb-icon-btn{
-  flex: 1 1 0;            
+  width: 100%;        
   height: 26px;
   padding: 0 8px;
   font-size: 12px;
@@ -228,10 +228,13 @@ body{
 
 /* make icon-only button square and centered */
 #btnShowTree{
-  flex: 0 0 26px;  
   width: 26px;
   padding: 0;
   justify-content: center;
+}
+
+.ft-spacer{
+  width: 26px;
 }
 
 /* slightly smaller icons inside tree toolbar */
