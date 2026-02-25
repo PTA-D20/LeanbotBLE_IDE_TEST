@@ -1,6 +1,6 @@
 export class LeanFs{
-    static #LS_KEY_TREE =     "LeanFs11__tree";
-    static #FILE_KEY_PREFIX = "LeanFs11_";
+    static #LS_KEY_TREE =     "LeanFs10__tree";
+    static #FILE_KEY_PREFIX = "LeanFs10_";
     static #rootUUID =        "bd70ce61-fc7d-41a5-b0f9-0017e998813a"; // random generate from https://www.uuidgenerator.net/
 
     static leanfs_TYPE = Object.freeze({
@@ -171,19 +171,6 @@ export class LeanFs{
     isBlocklyFile(itemUUID){
         return ( this.isType(itemUUID, LeanFs.leanfs_TYPE.BLOCKLY) );
     }
-
-    // async readFile(itemUUID) {
-
-    //     if (!this.isFile(itemUUID)) return null;
-
-    //     const compressed = localStorage.getItem(this.#fileKey(itemUUID));
-    //     if (!compressed) return null;
-
-    //     const content = await decompressString(compressed);
-
-    //     this.#items[itemUUID].contentHash = await getContentHash(content)
-    //     return content;
-    // }
 
     async readFile(itemUUID) {
 
@@ -398,6 +385,41 @@ export class LeanFs{
     // === Storage Manage === //
 
     async #saveTree() {
+        return this.#saveTree_FS10();
+        // return this.#saveTree_FS11();
+    }
+
+    async #saveTree_FS10() {
+        if (this.#delaySaveTree) {return;}
+
+        // Check if tree changed before save
+        const treeContent = JSON.stringify(this.#items);
+        const newHash = await getContentHash(treeContent);
+
+        if(this.#treeHash === newHash){
+            console.log("[LeanFS.saveTree] Skip (unchanged)");
+            return;
+        }
+
+        this.#treeHash = newHash;
+
+        // save tree
+        console.log("[LeanFS.saveTree] Save workspace");
+        const items = {};
+
+        for(const [uuid, item] of Object.entries(this.#items)){
+            items[uuid] = {
+                data: item.data,
+                children: Array.isArray(item.children) ? [...item.children] : null,
+            };
+        }
+
+        const json = JSON.stringify(items);
+
+        localStorage.setItem(LeanFs.#LS_KEY_TREE, json);
+    }
+
+    async #saveTree_FS11() {
         if (this.#delaySaveTree) {return;}
 
         // Check if tree changed before save
@@ -449,6 +471,45 @@ export class LeanFs{
     }
 
     async #loadTree() {
+        return this.#loadTree_FS10();
+        // return this.#loadTree_FS11();
+    }   
+
+    async #loadTree_FS10() {
+        try {
+            const rawTree = localStorage.getItem(LeanFs.#LS_KEY_TREE);
+
+            if (!rawTree) {
+                console.log("[LeanFS.loadTree] No workspace found in localStorage");
+                await this.#newTree();
+                return;
+            }
+            
+            this.#items = JSON.parse(rawTree)
+
+            // loop through json key value list
+            for (const [uuid, item] of Object.entries(this.#items)) {
+                //console.log(`${uuid}: ${item}`);
+                item.isFolder = Array.isArray(item.children);
+                if (!item.isFolder) item.children = null; // extra safe
+                item.index = uuid
+                item.contentHash = null
+            }
+
+            this.#rebuildParents();
+
+            // await this.#saveTree();
+            console.log("[LeanFS.loadTree] Workspace restored");
+        } catch (e) {
+            console.error("[LeanFS.loadTree] Restore failed", e);
+            throw e;
+        } 
+        // finally {
+        //     await this.#saveTree();
+        // }
+    }
+
+    async #loadTree_FS11() {
         try {
             const rawTree = localStorage.getItem(LeanFs.#LS_KEY_TREE);
 
