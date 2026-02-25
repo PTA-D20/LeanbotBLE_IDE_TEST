@@ -186,7 +186,9 @@ body{
 }
 
 /* hide all buttons except Show Tree */
-#editorRow.tree-collapsed #fileTreeToolbar > *:not(#btnShowTree){
+#editorRow.tree-collapsed 
+#fileTreeToolbar 
+.ft-toolbar-row > *:not(#btnShowTree){
   display:none;
 }
 
