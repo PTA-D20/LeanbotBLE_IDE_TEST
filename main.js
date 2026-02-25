@@ -667,7 +667,7 @@ window.onChangeBlockly = function (fileId) {
 // Restore Current ID
 // ============================================================
 
-const CURRENT_FILEID_KEY = "LeanFs11_current_fileID";
+const CURRENT_FILEID_KEY = "LeanFs10_current_fileID";
 
 window.currentFileId = localStorage.getItem(CURRENT_FILEID_KEY) || leanfs.getRoot() || null;
 
