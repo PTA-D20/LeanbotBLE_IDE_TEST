@@ -21,6 +21,7 @@ export class LeanbotBLE {
   #chars   = {};
   #connectingStartMs = 0;
   #connectingEndMs   = 0;
+  #userDisconnect = false;
 
   // ---------------- BLE CORE ----------------
 
@@ -82,6 +83,7 @@ export class LeanbotBLE {
 
   disconnect() {
     try {
+      this.#userDisconnect = true;
       // Không có thiết bị nào được lưu
       if (!this.#device) {
         return this.#returnBleResult(false, "No device found to disconnect. Please connect a device first.");
@@ -121,7 +123,26 @@ export class LeanbotBLE {
     if (this.Uploader.isTransferring === true) {
       this.Uploader.emitTransferError("Device disconnected while uploading.");
       this.Uploader.abortAll();
-    }  
+    }
+
+    if(this.#userDisconnect){
+      this.#userDisconnect = false; // reset flag
+      return; // nếu ngắt kết nối do user thì không cần reconnect
+    }
+    
+    // ref: https://github.com/loginov-rocks/bluetooth-terminal/blob/ea7476f3c6d7de47466d0a296cd491fc27db7d85/src/BluetoothTerminal.ts#L602
+    console.log(`Attempting to reconnect to device "${this.#device.name}"...`);
+    
+    // Using IIFE to leverage async/await while maintaining the void return type required by the event handler
+    // interface. Try/catch is required here to avoid propagating the error as there is no place to catch it.
+    (async () => {
+      try {
+        await this.#setupConnection();
+        console.log(`Device "${this.#device.name}" successfully reconnected`);
+      } catch (error) {
+        console.log(`Reconnection failed: "${error}"`);
+      }
+    })(); // Thử reconnect sau khi gatt disconnect 1 lần duy nhất
   };
 
   async #setupConnection() {
