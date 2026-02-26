@@ -825,31 +825,36 @@ class JDYUploader {
 
   /* ------------------- UPLOAD HEX ------------------- */
   async upload(hexText) {
-    this.#isCompileOK = true; // Đã compile xong
-    if (this.intervalGetSync) clearInterval(this.intervalGetSync); // xóa interval get sync nếu có
+    try{
+      this.#isCompileOK = true; // Đã compile xong
+      if (this.intervalGetSync) clearInterval(this.intervalGetSync); // xóa interval get sync nếu có
 
-    this.#uploadStartMs = performance.now();
-    this.#uploadEndMs = 0;
-    this.#BLEPackets = convertHexToBlePackets(hexText, { returnStep2: true });
+      this.#uploadStartMs = performance.now();
+      this.#uploadEndMs = 0;
+      this.#BLEPackets = convertHexToBlePackets(hexText, { returnStep2: true });
 
-    // while (!this.#isGetSyncOK) await new Promise(resolve => setTimeout(resolve, 5));
+      // while (!this.#isGetSyncOK) await new Promise(resolve => setTimeout(resolve, 5));
 
 
-    const start = performance.now();
-    const TIMEOUT = 5000; // 5 seconds
+      const start = performance.now();
+      const TIMEOUT = 5000; // 5 seconds
 
-    while (!this.#isGetSyncOK) {
-      if (performance.now() - start > TIMEOUT) {
-        clearInterval(this.intervalGetSync);
-        this.isUploading = false;
-        throw new Error("GET_SYNC timeout");
+      while (!this.#isGetSyncOK) {
+        if (performance.now() - start > TIMEOUT) {
+          clearInterval(this.intervalGetSync);
+          this.isUploading = false;
+          throw new Error("GET_SYNC timeout");
+        }
+        await new Promise(resolve => setTimeout(resolve, 10));
       }
-      await new Promise(resolve => setTimeout(resolve, 10));
+
+      await this.#uploadCode();
+
+      this.#uploadEndMs = performance.now();
     }
-
-    await this.#uploadCode();
-
-    this.#uploadEndMs = performance.now();
+    catch(e){
+      console.log("Catch JDYUploader Upload Error:", e);
+    }
   }
 
   async prepareUpload() {
@@ -900,25 +905,47 @@ class JDYUploader {
 
   /* ------------------- HANDLE RESPONSE ------------------- */
   async #handleResponse(bytes) {
-    console.log("[UPLOAD] Received response: ", bytes.toString());
-    if (this.#isSyncing ) {
-      await this.#handleGetSyncAck(bytes);
-      return;
-    }
+    try{
+      console.log("[UPLOAD] Received response: ", bytes.toString());
+      if (this.#isSyncing ) {
+        await this.#handleGetSyncAck(bytes);
+        return;
+      }
 
-    if (this.#isLoadingAddress) {
-      await this.#handleLoadAddressAck(bytes);
-      return;
-    }
+      if (this.#isLoadingAddress) {
+        await this.#handleLoadAddressAck(bytes);
+        return;
+      }
 
-    if (this.#isReadingPage) {
-      await this.#handleReadFlashAck(bytes);
-      return;
-    }
+      if (this.#isReadingPage) {
+        await this.#handleReadFlashAck(bytes);
+        return;
+     }
 
-    if (this.#isWritingPage) {
-      await this.#handleWriteFlashAck(bytes);
-      return;
+      if (this.#isWritingPage) {
+        await this.#handleWriteFlashAck(bytes);
+        return;
+      }
+    }
+    catch(e){
+        console.log("[UPLOAD] Error handling response", e);
+        this.abortAll();
+    }
+  }
+
+  /*Safe wait loop*/
+
+  async #waitUntil(conditionFlag, timeoutMs, label) {
+    const start = performance.now();
+    while (!conditionFlag()) {
+      if(this.isUploading === false){
+        throw new Error(`${label} aborted`);
+      }
+      if (performance.now() - start > timeoutMs) {
+        this.abortAll();
+        throw new Error(`${label} timeout after ${timeoutMs} ms`);
+      }
+      await new Promise(resolve => setTimeout(resolve, 5));
     }
   }
 
@@ -957,17 +984,17 @@ class JDYUploader {
     await this.#serial.SerialPipe_sendToLeanbot(cmd, false);
     this.#isLoadingAddress = true;
 
-    while (this.#isLoadingAddress) await new Promise(resolve => setTimeout(resolve, 5));
+    // while (this.#isLoadingAddress) await new Promise(resolve => setTimeout(resolve, 5));
+
+    //safe-wait load address ack, maximum 5 seconds
+    await this.#waitUntil(() => !this.#isLoadingAddress, 7000, "Load address ack");
   }
 
   async #handleLoadAddressAck(bytes) {
     this.#isLoadingAddress = false;
     if (!this.#isACK(bytes)) {
-      console.log("[LOAD] Invalid LOAD_ADDRESS ACK response");
       this.#emitUploadMessage("Load address failed");
-      this.abortAll(); // quick fix as there is no handle for load adress failed
-      this.isUploading = false;
-      return;
+      throw new Error("[LOAD] Invalid LOAD_ADDRESS ACK response");
     }
     console.log("[LOAD] LOAD_ADDRESS ACK received!");
   }
@@ -988,7 +1015,9 @@ class JDYUploader {
     this.#isCollectingPage = false;
     this.#pageBuffer = [];
 
-    while (this.#isReadingPage) await new Promise(resolve => setTimeout(resolve, 5));
+    // while (this.#isReadingPage) await new Promise(resolve => setTimeout(resolve, 5));
+    
+    await this.#waitUntil(() => !this.#isReadingPage, 7000, "Read page"); // safe-wait read page, maximum 5 seconds
   }
 
   async #handleReadFlashAck(chunk) {
@@ -1031,7 +1060,10 @@ class JDYUploader {
 
     this.#isWritingPage = true;
 
-    while (this.#isWritingPage) await new Promise(resolve => setTimeout(resolve, 5));
+    // while (this.#isWritingPage) await new Promise(resolve => setTimeout(resolve, 5));
+
+    //safe-wait write page, maximum 5 seconds
+    await this.#waitUntil(() => !this.#isWritingPage, 7000, "Write page ack");
 
     this.#emitUploadMessage(`Write ${(pageIndex + 1) * JDYUploader.#config.pageSizeByte} bytes`);
   }
@@ -1126,7 +1158,10 @@ class JDYUploader {
     await this.#readFlash(pageIndex);
 
     // chờ cho đến khi #handleReadFlashAck xử lý xong
-    while (this.#isReadingPage) await new Promise(resolve => setTimeout(resolve, 5));
+    // while (this.#isReadingPage) await new Promise(resolve => setTimeout(resolve, 5));
+
+    //safe-wait read page, maximum 5 seconds
+    await this.#waitUntil(() => !this.#isReadingPage, 7000, "Read page"); // safe-wait read page, maximum 5 seconds
 
     return this.#pageBuffer;
   }
