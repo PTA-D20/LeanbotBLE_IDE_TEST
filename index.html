@@ -296,7 +296,9 @@
     const params = new URLSearchParams(window.location.search);
 
     if (params.get('MODE')?.replace(/\/$/, '') === 'DEBUG') {
-        import('https://cdn.jsdelivr.net/gh/c-kick/mobileConsole/hnl.mobileconsole.min.js');
+        const script = document.createElement('script');
+        script.src = '/mobileConsole/hnl.mobileconsole.js';
+        document.head.appendChild(script);
     }
 </script>
 </body>
