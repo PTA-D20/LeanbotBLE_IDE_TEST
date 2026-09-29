@@ -1,5 +1,14 @@
 // main.js
 
+const params = new URLSearchParams(window.location.search);
+
+if (params.get('MODE')?.replace(/\/$/, '') === 'DEBUG') {
+  import('./uiConsoleDebug.js').then(({ uiDebug }) => {
+    const debug = uiDebug();
+  });
+}
+
+
 // ============================================================
 // VERSION
 // ============================================================
